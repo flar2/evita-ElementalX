@@ -195,7 +195,7 @@ export KBUILD_BUILDHOST := $(SUBARCH)
 #ARCH		?= $(SUBARCH)
 #CROSS_COMPILE	?= $(CONFIG_CROSS_COMPILE:"%"=%)
 ARCH		:= arm
-CROSS_COMPILE	:= /home/aaron/x-tools/arm-cortexa15neon-eabi/bin/arm-cortexa15neon-eabi-
+CROSS_COMPILE	:= /home/aaron/x-tools/arm-unknown-linux-gnueabi-linaro-dl/bin/arm-gnueabi-
 
 # Architecture as present in compile.h
 UTS_MACHINE 	:= $(ARCH)
