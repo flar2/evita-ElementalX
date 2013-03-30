@@ -1,0 +1,1 @@
+make ARCH=arm CROSS_COMPILE=/home/aaron/x-tools/arm-unknown-linux-gnueabi-linaro-dl/bin/arm-gnueabi- -j3
