@@ -4267,7 +4267,7 @@ static struct android_usb_platform_data android_usb_pdata = {
 	.usb_id_pin_gpio = ELITE_GPIO_USB_ID1,
 	.usb_rmnet_interface = "smd,bam",
 	.fserial_init_string = "smd:modem,tty,tty:autobot,tty:serial,tty:autobot",
-	.nluns		= 1,
+	.nluns		= 2,
 };
 
 static struct platform_device android_usb_device = {
@@ -4301,7 +4301,7 @@ void elite_add_usb_devices(void)
 
 	
 	if (board_mfg_mode() == 0) {
-		android_usb_pdata.nluns = 1;
+		android_usb_pdata.nluns = 2;
 		android_usb_pdata.cdrom_lun = 0x1;
 	}
 	android_usb_pdata.serial_number = board_serialno();
