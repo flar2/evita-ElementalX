@@ -31,6 +31,7 @@
 #include <asm/gpio.h>
 #include <linux/input/mt.h>
 #include <linux/pl_sensor.h>
+#include <linux/mfd/pm8xxx/vibrator.h>  
 
 #define SYN_I2C_RETRY_TIMES 10
 #define SHIFT_BITS 10
@@ -143,31 +144,12 @@ extern unsigned int get_tamper_sf(void);
 #ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_SWEEP2WAKE
 int s2w_switch = 1;
 int s2w_wakestat = 0;
+cputime64_t dt2w_time[2] = {0, 0}; 
+#define DT2W_TIMEOUT 250 
 bool scr_suspended = false, exec_count = true;
 bool scr_on_touch = false, barrier[2] = {false, false};
 static struct input_dev * sweep2wake_pwrdev;
 static DEFINE_MUTEX(pwrkeyworklock);
-
-#ifdef CONFIG_CMDLINE_OPTIONS
-static int __init cy8c_read_s2w_cmdline(char *s2w)
-{
-	if (strcmp(s2w, "1") == 0) {
-		printk(KERN_INFO "[cmdline_s2w]: Sweep2Sleep and Sweep2Wake enabled. | s2w='%s'", s2w);
-		s2w_switch = 1;
-	} else if (strcmp(s2w, "2") == 0) {
-		printk(KERN_INFO "[cmdline_s2w]: Sweep2Sleep enabled. | s2w='%s'", s2w);
-		s2w_switch = 2;
-	} else if (strcmp(s2w, "0") == 0) {
-		printk(KERN_INFO "[cmdline_s2w]: Sweep2Wake disabled. | s2w='%s'", s2w);
-		s2w_switch = 0;
-	} else {
-		printk(KERN_INFO "[cmdline_s2w]: No valid input found. Sweep2Wake disabled. | s2w='%s'", s2w);
-		s2w_switch = 0;
-	}
-	return 1;
-}
-__setup("s2w=", cy8c_read_s2w_cmdline);
-#endif
 
 extern void sweep2wake_setdev(struct input_dev * input_device) {
 	sweep2wake_pwrdev = input_device;
@@ -1381,7 +1363,7 @@ static ssize_t synaptics_sweep2wake_show(struct device *dev,
 static ssize_t synaptics_sweep2wake_dump(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
 {
-	if (buf[0] >= '0' && buf[0] <= '2' && buf[1] == '\n')
+	if (buf[0] >= '0' && buf[0] <= '3' && buf[1] == '\n')
                 if (s2w_switch != buf[0] - '0')
 		        s2w_switch = buf[0] - '0';
 
@@ -1672,12 +1654,35 @@ static int synaptics_init_panel(struct synaptics_ts_data *ts)
 	return ret;
 }
 
+#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_SWEEP2WAKE
+static void dt2w_func(int y, cputime64_t trigger_time) {
+
+        dt2w_time[1] = dt2w_time[0];
+        dt2w_time[0] = trigger_time;
+
+        if (scr_suspended) {
+
+		if (last_touch_position_y > 1100 && ((dt2w_time[0]-dt2w_time[1]) < DT2W_TIMEOUT)) {
+                        printk(KERN_INFO"[DT2W]: OFF->ON\n");
+		        vibrate(20);
+                        sweep2wake_pwrtrigger();
+		}
+
+	}
+
+
+        return;
+}
+
+#endif
+
 static void synaptics_ts_finger_func(struct synaptics_ts_data *ts)
 {
 	int ret;
 	uint8_t buf[((ts->finger_support * 21 + 3) / 4)];
 #ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_SWEEP2WAKE
 	int prevx = 0, nextx = 0;
+        cputime64_t dt_trigger_time;
 #endif
 	memset(buf, 0x0, sizeof(buf));
 	ret = i2c_syn_read(ts->client,
@@ -1942,6 +1947,13 @@ static void synaptics_ts_finger_func(struct synaptics_ts_data *ts)
 // 				      printk(KERN_INFO "[sweep2wake]: %d=> X:%d, Y:%d w:%d, z:%d\n",
 // 								i + 1, finger_data[i][0], finger_data[i][1],
 // 								finger_data[i][2], finger_data[i][3]);
+							//dt2w
+							if ((ts->finger_count == 1) && (scr_suspended == true) && (s2w_switch == 3)) {
+								dt_trigger_time = ktime_to_ms(ktime_get());
+								dt2w_func(finger_data[i][1], dt_trigger_time);
+							}
+
+
 							//left->right
 							if ((ts->finger_count == 1) && (scr_suspended == true) && (s2w_switch > 0)) {
 								prevx = 30;
@@ -3043,7 +3055,7 @@ static int synaptics_ts_suspend(struct i2c_client *client, pm_message_t mesg)
 		//screen off, enable_irq_wake
 	/*	scr_suspended = true;
 		enable_irq_wake(client->irq);  */
-		if (s2w_switch == 1) {
+		if (s2w_switch == 1 || s2w_switch == 3 ) {
 		  enable_irq_wake(client->irq);
 		  s2w_wakestat = 1;
 		} else {
