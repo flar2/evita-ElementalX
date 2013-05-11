@@ -1,6 +1,7 @@
 /* drivers/input/touchscreen/synaptics_3200.c - Synaptics 3200 serious touch panel driver
  *
  * Copyright (C) 2011 HTC Corporation.
+ * Copyright (c) 2013, flar2 asegaert@gmail.com - doubletap2wake
  *
  *
  * This software is licensed under the terms of the GNU General Public
@@ -31,7 +32,6 @@
 #include <asm/gpio.h>
 #include <linux/input/mt.h>
 #include <linux/pl_sensor.h>
-#include <linux/mfd/pm8xxx/vibrator.h>  
 
 #define SYN_I2C_RETRY_TIMES 10
 #define SHIFT_BITS 10
@@ -142,6 +142,7 @@ static irqreturn_t synaptics_irq_thread(int irq, void *ptr);
 extern unsigned int get_tamper_sf(void);
 
 #ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_SWEEP2WAKE
+
 int s2w_switch = 1;
 int s2w_wakestat = 0;
 cputime64_t dt2w_time[2] = {0, 0}; 
@@ -150,6 +151,13 @@ bool scr_suspended = false, exec_count = true;
 bool scr_on_touch = false, barrier[2] = {false, false};
 static struct input_dev * sweep2wake_pwrdev;
 static DEFINE_MUTEX(pwrkeyworklock);
+
+extern uint8_t touchscreen_is_on(void) {
+	if (scr_suspended == false) {
+		return 1;
+	}
+	return 0;
+}
 
 extern void sweep2wake_setdev(struct input_dev * input_device) {
 	sweep2wake_pwrdev = input_device;
@@ -1655,21 +1663,17 @@ static int synaptics_init_panel(struct synaptics_ts_data *ts)
 }
 
 #ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_SWEEP2WAKE
-static void dt2w_func(int y, cputime64_t trigger_time) {
+static void dt2w_func(cputime64_t trigger_time) {
 
         dt2w_time[1] = dt2w_time[0];
         dt2w_time[0] = trigger_time;
 
-        if (scr_suspended) {
+	printk(KERN_INFO"[DT2W]: inside the function\n");
 
-		if (last_touch_position_y > 1100 && ((dt2w_time[0]-dt2w_time[1]) < DT2W_TIMEOUT)) {
-                        printk(KERN_INFO"[DT2W]: OFF->ON\n");
-		        vibrate(20);
-                        sweep2wake_pwrtrigger();
-		}
-
+	if ((dt2w_time[0]-dt2w_time[1]) < DT2W_TIMEOUT) {
+               printk(KERN_INFO"[DT2W]: OFF->ON\n");
+               sweep2wake_pwrtrigger();
 	}
-
 
         return;
 }
@@ -1802,6 +1806,14 @@ static void synaptics_ts_finger_func(struct synaptics_ts_data *ts)
 				printk(KERN_INFO "[TP] Finger leave\n");
 
 #ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_SWEEP2WAKE
+				//dt2w
+				if ((((ts->finger_count > 0)?1:0) == 0) && (scr_suspended == true) && (s2w_switch == 3) &&
+						(finger_data[0][1] > 1400) && (finger_data[0][1] < 1780)) { 
+					dt_trigger_time = ktime_to_ms(ktime_get());
+					printk(KERN_INFO "[dt2wake]: %d=> Y:%d\n", i + 1,  finger_data[0][1]);
+					dt2w_func(dt_trigger_time);
+				}
+
 				/* if finger released, reset count & barriers */
 				if ((((ts->finger_count > 0)?1:0) == 0) && (s2w_switch > 0)) {
 					exec_count = true;
@@ -1945,14 +1957,8 @@ static void synaptics_ts_finger_func(struct synaptics_ts_data *ts)
 #ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_SWEEP2WAKE
 
 // 				      printk(KERN_INFO "[sweep2wake]: %d=> X:%d, Y:%d w:%d, z:%d\n",
-// 								i + 1, finger_data[i][0], finger_data[i][1],
+//								i + 1, finger_data[i][0], finger_data[i][1],
 // 								finger_data[i][2], finger_data[i][3]);
-							//dt2w
-							if ((ts->finger_count == 1) && (scr_suspended == true) && (s2w_switch == 3)) {
-								dt_trigger_time = ktime_to_ms(ktime_get());
-								dt2w_func(finger_data[i][1], dt_trigger_time);
-							}
-
 
 							//left->right
 							if ((ts->finger_count == 1) && (scr_suspended == true) && (s2w_switch > 0)) {
