@@ -1,7 +1,7 @@
 /* drivers/input/touchscreen/synaptics_3200.c - Synaptics 3200 serious touch panel driver
  *
  * Copyright (C) 2011 HTC Corporation.
- * Copyright (c) 2013, flar2 asegaert@gmail.com - doubletap2wake
+ * Copyright (c) 2013, flar2 asegaert@gmail.com - doubletap2wake & pocket detection
  *
  *
  * This software is licensed under the terms of the GNU General Public
@@ -172,20 +172,20 @@ static void sweep2wake_presspwr(struct work_struct * sweep2wake_presspwr_work) {
 
 	int pocket_mode = 0;
 	
-	if (pocket_detect == 1)
+	if (scr_suspended == true && pocket_detect == 1)
 		pocket_mode = power_key_check_in_pocket();
 
 	if (!pocket_mode || pocket_detect == 0) {
 
-		if (!mutex_trylock(&pwrkeyworklock))
-	                return;
+	   	if (!mutex_trylock(&pwrkeyworklock))
+			return;
 		input_event(sweep2wake_pwrdev, EV_KEY, KEY_POWER, 1);
 		input_event(sweep2wake_pwrdev, EV_SYN, 0, 0);
-		msleep(100);
+		msleep(80);
 		input_event(sweep2wake_pwrdev, EV_KEY, KEY_POWER, 0);
 		input_event(sweep2wake_pwrdev, EV_SYN, 0, 0);
-		msleep(100);
-	        mutex_unlock(&pwrkeyworklock);
+		msleep(80);
+		mutex_unlock(&pwrkeyworklock);
 		return;
 	}
 }
@@ -1881,7 +1881,7 @@ static void synaptics_ts_finger_func(struct synaptics_ts_data *ts)
 #ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_SWEEP2WAKE
 				//dt2w
 				if ((((ts->finger_count > 0)?1:0) == 0) && (scr_suspended == true) && (dt2w_switch == 1) &&
-						(finger_data[0][1] > 1400) && (finger_data[0][1] < 1780)) { 
+						(finger_data[0][1] > 1400)) { 
 					dt_trigger_time = ktime_to_ms(ktime_get());
 					printk(KERN_INFO "[dt2wake]: %d=> Y:%d\n", i + 1,  finger_data[0][1]);
 					dt2w_func(dt_trigger_time);
